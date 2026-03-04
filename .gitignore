@@ -1,0 +1,19 @@
+# Secrets — never commit
+.env
+openclaw.json
+
+# Per-instance data
+memory/
+workflows/
+IDENTITY.md
+
+# Dependencies
+node_modules/
+
+# XMTP database
+*.db3
+*.db3-shm
+*.db3-wal
+
+# OS
+.DS_Store
