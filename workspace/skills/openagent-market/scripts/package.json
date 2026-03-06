@@ -1,6 +1,6 @@
 {
-    "name": "openagent-client",
-    "version": "1.0.0",
+    "name": "openagent-market-skill",
+    "private": true,
     "type": "module",
     "dependencies": {
         "@openagentmarket/nodejs": "^1.5.1",

@@ -1,59 +1,54 @@
 # Alita — AI Agent Orchestrator
 
-Alita is an autonomous AI agent that hires other agents from [openagent.market](https://openagent.market) to get things done. She runs on [OpenClaw](https://github.com/nicholasgriffintn/openclaw) and communicates via XMTP.
+Alita is an autonomous AI agent that hires specialists from [openagent.market](https://openagent.market) to get things done. She runs on [OpenClaw](https://openclaw.ai) and communicates via XMTP.
 
-## What Alita Does
-
-- **Discovers** agents from the open market
-- **Creates workflows** (cost estimate + approval)
-- **Hires agents** via XMTP messaging
-- **Pays agents** with USDC on Base (x402 protocol)
-- **Reports results** back to the user
-
-## Quick Start (Mac Mini / any machine)
+## Quick Start
 
 ```bash
-git clone https://github.com/YourUser/AlitaAgent.git
+git clone https://github.com/openagentmarket/AlitaAgent.git
 cd AlitaAgent
-chmod +x setup.sh
 ./setup.sh
 ```
 
-The setup script will:
-1. Install OpenClaw (if not installed)
-2. Generate a fresh wallet (mnemonic + address)
-3. Copy workspace files to `~/.openclaw/workspace/`
-4. Install SDK dependencies
-5. Set up auto-update cron (pulls latest from this repo every 15 min)
-6. Start the gateway
+**Prerequisites:** Node.js 22+, OpenClaw installed and configured (`openclaw onboard`).
 
-## Files
+The setup script will:
+1. Install the openagent-market skill dependencies
+2. Generate a fresh wallet (or keep your existing one)
+3. Link the workspace to `~/.openclaw/workspace/`
+4. Set up auto-update cron (git pull every 15 min)
+5. Restart the gateway
+
+## Structure
 
 ```
 workspace/
-├── AGENTS.md          # Alita's brain (how to discover, hire, pay agents)
-├── SOUL.md            # Personality
-├── IDENTITY.md        # Generated per instance (name + wallet)
-├── rules/
-│   └── safety.md      # Spending caps, restricted actions
-├── openagent-client/  # SDK scripts
-│   ├── discover.js    # Fetch agents from openagent.market
-│   ├── hire.js        # Send message + handle x402 payment
-│   └── package.json   # Dependencies
-└── workflows/         # User-created workflows (auto-generated)
+├── AGENTS.md                     # Brain
+├── SOUL.md                       # Personality
+├── rules/safety.md               # Spending caps
+└── skills/
+    └── openagent-market/
+        ├── SKILL.md              # Skill definition
+        └── scripts/
+            ├── discover.mjs      # List all market agents
+            └── hire.mjs          # Hire + auto-pay (x402)
 ```
+
+## How It Works
+
+1. User asks Alita for something
+2. Alita discovers agents via `discover.mjs`
+3. Alita hires the best agent via `hire.mjs`
+4. If payment required, `hire.mjs` auto-pays USDC on Base
+5. Alita returns results to the user
 
 ## Updating
 
-Updates are pulled automatically every 15 minutes via cron.
-To update manually:
-```bash
-cd ~/.openclaw/workspace && git pull origin main --ff-only
-```
+Auto-updates every 15 minutes via cron. Manual: `git pull`
 
 ## Security
 
 - Each instance gets its own mnemonic (never shared)
 - Spending caps: $5/trade, $50/day, $500/month
-- No skill installation — only hires from openagent.market
-- Secrets stay local (never committed to git)
+- No package installation — only hires from openagent.market
+- Secrets stay local (`.env`, `openclaw.json` — gitignored)
