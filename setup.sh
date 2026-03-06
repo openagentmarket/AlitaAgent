@@ -2,7 +2,7 @@
 set -e
 
 # ─── Alita Setup ─────────────────────────────────────────────────────────────
-# Run this from inside the cloned AlitaAgent repo.
+# One script. Pull and run. Everything else is automatic.
 #
 # Usage:
 #   git clone https://github.com/openagentmarket/AlitaAgent.git
@@ -20,38 +20,51 @@ echo "  🤖 Alita Setup"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 
-# ─── Check prerequisites ────────────────────────────────────────────────────
-echo "Checking prerequisites..."
+# ─── 1. Install Homebrew if missing ─────────────────────────────────────────
+if ! command -v brew &> /dev/null; then
+    echo "📦 Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    if [ -f /opt/homebrew/bin/brew ]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+    fi
+fi
+echo "✅ Homebrew"
 
+# ─── 2. Install Node.js if missing ──────────────────────────────────────────
 if ! command -v node &> /dev/null; then
-    echo "  ❌ Node.js not found. Run: brew install node"
-    exit 1
+    echo "📦 Installing Node.js..."
+    brew install node
 fi
-echo "  ✅ Node.js $(node --version)"
+echo "✅ Node.js $(node --version)"
 
+# ─── 3. Install OpenClaw if missing ─────────────────────────────────────────
 if ! command -v openclaw &> /dev/null; then
-    echo "  ❌ OpenClaw not found. Install it first."
-    exit 1
+    echo "📦 Installing OpenClaw..."
+    npm install -g openclaw@latest
 fi
-echo "  ✅ OpenClaw $(openclaw --version 2>/dev/null | head -1)"
+echo "✅ OpenClaw $(openclaw --version 2>/dev/null | head -1)"
 
+# ─── 4. Run OpenClaw onboard if not configured ──────────────────────────────
 if [ ! -f "$OPENCLAW_DIR/openclaw.json" ]; then
-    echo "  ❌ No openclaw.json — run 'openclaw onboard' first."
-    exit 1
+    echo ""
+    echo "🔧 OpenClaw not configured yet. Running onboard wizard..."
+    echo "   Follow the prompts to set up your AI provider and Telegram."
+    echo ""
+    openclaw onboard --install-daemon
+    echo ""
 fi
-echo "  ✅ OpenClaw configured"
+echo "✅ OpenClaw configured"
 
-# ─── Install skill dependencies ─────────────────────────────────────────────
+# ─── 5. Install skill dependencies ──────────────────────────────────────────
 echo ""
-echo "Installing skill dependencies..."
+echo "📦 Installing skill dependencies..."
 cd "$REPO_DIR/workspace/skills/openagent-market/scripts"
 npm install --silent 2>&1 | tail -3
-echo "  ✅ openagent-market skill ready"
+echo "✅ openagent-market skill ready"
 
-# ─── Generate or reuse mnemonic ─────────────────────────────────────────────
+# ─── 6. Generate or reuse mnemonic ──────────────────────────────────────────
 echo ""
-echo "Setting up identity..."
-
 MNEMONIC=""
 EXISTING=$(node --input-type=module -e "
 import fs from 'fs';
@@ -66,15 +79,15 @@ if [ -n "$EXISTING" ]; then
 import { Wallet } from 'ethers';
 console.log(Wallet.fromPhrase('$EXISTING').address);
 " 2>/dev/null || echo "unknown")
-    echo "  Existing wallet: $ADDR"
-    read -p "  Keep it? (y/n): " KEEP
+    echo "🔑 Existing wallet: $ADDR"
+    read -p "   Keep it? (y/n): " KEEP
     if [ "$KEEP" = "y" ] || [ "$KEEP" = "Y" ]; then
         MNEMONIC="$EXISTING"
     fi
 fi
 
 if [ -z "$MNEMONIC" ]; then
-    echo "  Generating new wallet..."
+    echo "🔑 Generating new wallet..."
     cd "$REPO_DIR/workspace/skills/openagent-market/scripts"
     MNEMONIC=$(node --input-type=module -e "
 import { Wallet } from 'ethers';
@@ -85,28 +98,37 @@ import { Wallet } from 'ethers';
 console.log(Wallet.fromPhrase('$MNEMONIC').address);
 ")
     echo ""
-    echo "  🔑 NEW WALLET: $ADDR"
-    echo "  📝 MNEMONIC: $MNEMONIC"
-    echo "  ⚠️  Save this! You won't see it again."
+    echo "  ┌──────────────────────────────────────────────────┐"
+    echo "  │  🔑 NEW WALLET GENERATED                         │"
+    echo "  │  Address:  $ADDR"
+    echo "  │  Mnemonic: $MNEMONIC"
+    echo "  │  ⚠️  SAVE THIS — you won't see it again!         │"
+    echo "  └──────────────────────────────────────────────────┘"
     echo ""
-    read -p "  Saved? (y): " _
+    read -p "   Saved? (y): " _
 fi
 
-# ─── Write .env ─────────────────────────────────────────────────────────────
+ADDR=$(cd "$REPO_DIR/workspace/skills/openagent-market/scripts" && node --input-type=module -e "
+import { Wallet } from 'ethers';
+console.log(Wallet.fromPhrase('$MNEMONIC').address);
+" 2>/dev/null || echo "unknown")
+
+# ─── 7. Write secrets (local only, gitignored) ──────────────────────────────
 cat > "$REPO_DIR/workspace/skills/openagent-market/scripts/.env" << EOF
 MNEMONIC=$MNEMONIC
 EOF
-echo "  ✅ .env written"
 
-# ─── Update openclaw.json ───────────────────────────────────────────────────
-echo ""
-echo "Updating OpenClaw config..."
+# ─── 8. Update openclaw.json ────────────────────────────────────────────────
+echo "⚙️  Updating OpenClaw config..."
 cd "$REPO_DIR/workspace/skills/openagent-market/scripts"
 node --input-type=module -e "
 import fs from 'fs';
 const config = JSON.parse(fs.readFileSync('$OPENCLAW_DIR/openclaw.json','utf8'));
 config.env = config.env || {};
 config.env.MNEMONIC = '$MNEMONIC';
+config.commands = config.commands || {};
+config.commands.native = 'auto';
+config.commands.nativeSkills = 'auto';
 config.gateway = config.gateway || {};
 config.gateway.nodes = config.gateway.nodes || {};
 config.gateway.nodes.denyCommands = [
@@ -116,28 +138,23 @@ config.gateway.nodes.denyCommands = [
 ];
 fs.writeFileSync('$OPENCLAW_DIR/openclaw.json', JSON.stringify(config, null, 2));
 "
-echo "  ✅ Config updated"
+echo "✅ Config updated (bash enabled, safety rules applied)"
 
-# ─── Link workspace ─────────────────────────────────────────────────────────
-echo ""
-echo "Linking workspace..."
+# ─── 9. Link workspace ──────────────────────────────────────────────────────
+echo "🔗 Linking workspace..."
+mkdir -p "$OPENCLAW_DIR"
 if [ -d "$WORKSPACE_DIR" ] && [ ! -L "$WORKSPACE_DIR" ]; then
     mv "$WORKSPACE_DIR" "$OPENCLAW_DIR/workspace-backup-$(date +%s)"
 fi
 if [ -L "$WORKSPACE_DIR" ]; then rm "$WORKSPACE_DIR"; fi
 ln -s "$REPO_DIR/workspace" "$WORKSPACE_DIR"
-echo "  ✅ Linked: ~/.openclaw/workspace → repo/workspace"
+echo "✅ ~/.openclaw/workspace → repo/workspace"
 
-# ─── Create per-instance dirs ───────────────────────────────────────────────
+# ─── 10. Create per-instance dirs ───────────────────────────────────────────
 mkdir -p "$REPO_DIR/workspace/memory"
 mkdir -p "$REPO_DIR/workspace/workflows"
 
-# ─── Write IDENTITY.md ──────────────────────────────────────────────────────
-ADDR=$(cd "$REPO_DIR/workspace/skills/openagent-market/scripts" && node --input-type=module -e "
-import { Wallet } from 'ethers';
-console.log(Wallet.fromPhrase('$MNEMONIC').address);
-" 2>/dev/null || echo "unknown")
-
+# ─── 11. Write IDENTITY.md ──────────────────────────────────────────────────
 cat > "$REPO_DIR/workspace/IDENTITY.md" << EOF
 name: Alita
 handle: "@AlitaAgent"
@@ -147,15 +164,16 @@ home: $(hostname)
 wallet: $ADDR
 EOF
 
-# ─── Auto-update cron ───────────────────────────────────────────────────────
+# ─── 12. Auto-update cron ───────────────────────────────────────────────────
 CRON_CMD="*/15 * * * * cd $REPO_DIR && git pull origin main --ff-only > /dev/null 2>&1"
 (crontab -l 2>/dev/null | grep -v "AlitaAgent" ; echo "$CRON_CMD") | crontab -
-echo "  ✅ Auto-update cron (every 15 min)"
+echo "✅ Auto-update cron (every 15 min)"
 
-# ─── Restart gateway ────────────────────────────────────────────────────────
+# ─── 13. Restart gateway ────────────────────────────────────────────────────
 echo ""
-echo "Restarting gateway..."
-openclaw gateway restart 2>/dev/null || true
+echo "🔄 Restarting gateway..."
+openclaw gateway restart 2>/dev/null || openclaw gateway install 2>/dev/null || true
+sleep 2
 
 # ─── Done ────────────────────────────────────────────────────────────────────
 echo ""
@@ -163,9 +181,9 @@ echo "════════════════════════�
 echo "  ✅ Alita is ready!"
 echo "═══════════════════════════════════════════════════════"
 echo ""
-echo "  Wallet: $ADDR"
+echo "  Wallet:    $ADDR"
 echo "  Dashboard: http://127.0.0.1:18789/"
 echo ""
-echo "  Test: openclaw agent -m 'discover what agents are available'"
-echo "  Fund: Send USDC + ETH on Base to $ADDR"
+echo "  Test:  openclaw agent -m 'discover what agents are available'"
+echo "  Fund:  Send USDC + ETH on Base to $ADDR"
 echo ""
